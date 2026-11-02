@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "chains": [
+    {
+      "chain_key": "zilliqa-evm",
+      "display_name": "Zilliqa EVM",
+      "family": "evm",
+      "rpc_urls": [
+        "https://public.moonlet.cloud/zilliqa"
+      ],
+      "native_symbol": "ZIL",
+      "enabled": true,
+      "adapter_class": "arbitrage_bot.chains.evm.adapter.EVMChainAdapter"
+    }
+  ]
+}
