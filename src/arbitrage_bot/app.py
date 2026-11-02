@@ -1,17 +1,89 @@
-"""Safe application entry point for the refactor scaffold.
+"""Safe shadow-mode runtime for the modular-monolith preview.
 
-This module intentionally does not import the legacy bot or place trades.
-Runtime wiring will be added only after adapter contracts and regression tests
-are established. Live trading must remain opt-in and separately guarded.
+Only public market data and read-only eth_call are used. No wallet, private key,
+approval, order placement, or swap submission is loaded by this entry point.
 """
+import argparse
+import asyncio
+import logging
+
+from dotenv import load_dotenv
+
+from arbitrage_bot.cells.cex.kucoin.market_data import KuCoinMarketData
+from arbitrage_bot.cells.dexes.plunderswap.market_data import PlunderSwapMarketData
+from arbitrage_bot.cells.networks.zilliqa_evm.read_only_rpc import ReadOnlyRPC
+from arbitrage_bot.infrastructure.config import Settings
+from arbitrage_bot.infrastructure.logging import configure_logging
+from arbitrage_bot.services.market_data import MarketDataService
+from arbitrage_bot.services.shadow_analyzer import ShadowAnalyzer
+
+
+def _arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the arbitrage refactor in safe read-only shadow mode.")
+    parser.add_argument("--cycles", type=int, default=None, help="Number of cycles; 1 runs a single snapshot. 0 means continuous.")
+    parser.add_argument("--interval", type=float, default=None, help="Seconds between snapshots (minimum 1).")
+    return parser.parse_args()
+
+
+async def _run(settings: Settings, cycles: int, interval: float) -> int:
+    # Import only configuration/ABI data from the legacy root module.
+    # The legacy trading module and wallet/signing code are never imported.
+    import constants as legacy_config
+
+    rpc = ReadOnlyRPC(list(legacy_config.RPC_NODES), timeout_seconds=settings.rpc_timeout_seconds)
+    kucoin = KuCoinMarketData(legacy_config.KUCOIN_BASE_URL, settings.kucoin_timeout_seconds)
+    plunderswap = PlunderSwapMarketData(rpc, legacy_config)
+    market_data = MarketDataService(kucoin, plunderswap, legacy_config)
+    analyzer = ShadowAnalyzer(legacy_config)
+
+    log = logging.getLogger("arbitrage_bot.runtime")
+    log.warning("runtime_start mode=shadow live_trading_enabled=false cycles=%s interval_seconds=%s", cycles, interval)
+    log.warning("safety_boundary read_only_rpc=true public_kucoin_data=true order_submission=disabled")
+    completed = 0
+    while cycles == 0 or completed < cycles:
+        completed += 1
+        try:
+            snapshot = await market_data.collect()
+            candidates = analyzer.analyze(snapshot)
+            eligible = [candidate for candidate in candidates if candidate.legacy_eligible]
+            log.info(
+                "shadow_cycle_complete cycle=%d observed_at=%s pairs=%d candidates=%d threshold_eligible=%d top_candidate=%s",
+                completed, snapshot.observed_at.isoformat(), len(snapshot.plunderswap),
+                len(candidates), len(eligible),
+                (f"{eligible[0].pair}:{eligible[0].direction}:profit={eligible[0].estimated_profit_quote}"
+                 if eligible else "none"),
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("shadow_cycle_failed cycle=%d", completed)
+        if cycles != 0 and completed >= cycles:
+            break
+        await asyncio.sleep(interval)
+    log.warning("runtime_stopped mode=shadow cycles_completed=%d live_trading_enabled=false", completed)
+    return 0
 
 
 def main() -> int:
-    print(
-        "Arbitrage Bot modular scaffold is installed. "
-        "No live trading was started."
-    )
-    return 0
+    load_dotenv()
+    args = _arguments()
+    try:
+        settings = Settings.from_env()
+        cycles = settings.max_cycles if args.cycles is None else args.cycles
+        interval = settings.check_interval_seconds if args.interval is None else args.interval
+        if cycles < 0:
+            raise ValueError("--cycles must be >= 0")
+        if interval < 1:
+            raise ValueError("--interval must be >= 1 second")
+        configure_logging(settings.log_directory, settings.log_level)
+        return asyncio.run(_run(settings, cycles, interval))
+    except KeyboardInterrupt:
+        logging.getLogger("arbitrage_bot.runtime").warning("runtime_interrupted")
+        return 130
+    except Exception as exc:
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger("arbitrage_bot.runtime").exception("runtime_start_failed error=%s", exc)
+        return 1
 
 
 if __name__ == "__main__":
