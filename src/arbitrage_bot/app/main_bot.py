@@ -24,9 +24,10 @@ from constants import (
     INTER_TRADE_DELAY,
     WZIL_ADDRESS, ZUSDC_ADDRESS, ZUSDT_ADDRESS,
     PAIRS, TOKEN_ABI, ZUSDC_ABI, PLUNDER_PAIR_ABI, FULL_ROUTER_ABI, PAIR_ABI,
-    SIMULATION_THRESHOLD, SIMULATION_TIMEOUT
+    SIMULATION_THRESHOLD, SIMULATION_TIMEOUT, MARKET_REGISTRY
 )
 from rpc_manager import RPCManager
+from arbitrage_bot.app.market_runtime import MarketRuntime
 
 # ============= تنظیمات لاگ =============
 if not os.path.exists(LOG_DIRECTORY):
@@ -105,6 +106,7 @@ consecutive_error_counter = {}
 last_error_reset = time.time()
 balance_updater_task = None
 rpc_manager = None
+market_runtime = None
 current_nonce = None
 
 # متغیرهای جدید برای حالت شبیه‌ساز
@@ -681,12 +683,14 @@ async def check_arbitrage():
     else:
         logging.info("No API requests this cycle", extra=add_log_context())
 
+    if market_runtime is not None:
+        await market_runtime.run_cycle()
     logging.info("Arbitrage cycle completed, waiting for next cycle", extra=add_log_context())
     await asyncio.sleep(CHECK_INTERVAL)
 
 # ============= حلقه اصلی =============
 async def main_loop():
-    global http_session, valid_pairs, balance_updater_task, rpc_manager, w3, router_contract
+    global http_session, valid_pairs, balance_updater_task, rpc_manager, w3, router_contract, market_runtime
     global consecutive_failures, simulation_mode, simulation_start_time
 
     logging.info("Starting Arbitrage Bot (v1.1.0)", extra=add_log_context())
@@ -725,6 +729,7 @@ async def main_loop():
     dex.rpc_manager = rpc_manager
     dex.WALLET_ADDRESS = WALLET_ADDRESS
     dex.METAMASK_PRIVATE_KEY = METAMASK_PRIVATE_KEY
+    market_runtime = MarketRuntime(MARKET_REGISTRY, METAMASK_PRIVATE_KEY, WALLET_ADDRESS, rpc_manager)
 
     if http_session is None or http_session.closed:
         http_session = aiohttp.ClientSession(

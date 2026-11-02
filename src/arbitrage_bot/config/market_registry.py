@@ -30,16 +30,19 @@ class MarketRegistry:
     def validate(self):
         for m in self.markets.values():
             if m.chain_key not in self.chains: raise RegistryError(f"Unknown chain for {m.market_id}")
-            if m.dex_key not in self.dexes or self.dexes[m.dex_key]["chain_key"]!=m.chain_key: raise RegistryError(f"Unknown/mismatched DEX for {m.market_id}")
+            if (m.chain_key,m.dex_key) not in self.dexes: raise RegistryError(f"Unknown/mismatched DEX for {m.market_id}")
             for aid in (m.base_asset_id,m.quote_asset_id):
                 if aid not in self.assets or self.assets[aid].chain_key!=m.chain_key: raise RegistryError(f"Unknown/mismatched asset {aid}")
             if not m.base_amounts_raw or any(x<=0 for x in m.base_amounts_raw): raise RegistryError(f"Invalid sizes for {m.market_id}")
             if len(m.base_amounts_raw)!=len(m.profit_thresholds_quote): raise RegistryError(f"Size/threshold count mismatch for {m.market_id}")
             if not m.cex_symbol or "-" not in m.cex_symbol: raise RegistryError(f"Invalid CEX symbol for {m.market_id}")
     def enabled_markets(self): return tuple(m for m in self.markets.values() if m.enabled)
+    def generic_markets(self): return tuple(m for m in self.enabled_markets() if m.execution_profile=="generic")
     def legacy_maps(self):
         pairs,amounts,thresholds={},{},{}
         for m in self.enabled_markets():
+            if m.execution_profile != "legacy_zilliqa_wzil":
+                continue
             b,q=self.assets[m.base_asset_id],self.assets[m.quote_asset_id]
             pairs[m.market_id]={"token_in":b.address,"token_out":q.address,"pool":m.pool,"fee_bps":m.fee_bps,"fee_percent":m.fee_percent,"default_gas":m.default_gas,"version":m.version,"chain_key":m.chain_key,"dex_key":m.dex_key,"dex_pair_key":m.dex_pair_key,"cex_key":m.cex_key,"cex_symbol":m.cex_symbol,"cex_base_currency":m.cex_base_currency,"cex_quote_currency":m.cex_quote_currency,"base_asset_id":m.base_asset_id,"quote_asset_id":m.quote_asset_id,"base_decimals":b.decimals,"quote_decimals":q.decimals,"cex_base_decimals":m.cex_base_decimals,"cex_size_precision":m.cex_size_precision,"execution_profile":m.execution_profile,"legacy_quote_scale":m.legacy_quote_scale}
             amounts[m.market_id]=list(m.base_amounts_raw); thresholds[m.market_id]=list(m.profit_thresholds_quote)

@@ -9,7 +9,8 @@
         "https://public.moonlet.cloud/zilliqa"
       ],
       "native_symbol": "ZIL",
-      "enabled": true
+      "enabled": true,
+      "adapter_class": "arbitrage_bot.chains.evm.adapter.EVMChainAdapter"
     }
   ]
 }

@@ -91,8 +91,8 @@ ASSETS = MARKET_REGISTRY.assets
 WZIL_ADDRESS = ASSETS["WZIL"].address
 ZUSDC_ADDRESS = ASSETS["ZUSDC"].address
 ZUSDT_ADDRESS = ASSETS["ZUSDT"].address
-POOLS = {market.market_id: market.pool for market in MARKET_REGISTRY.enabled_markets()}
 PAIRS, ZIL_AMOUNT, ARBITRAGE_THRESHOLD_USDT = MARKET_REGISTRY.legacy_maps()
+POOLS = {key: value["pool"] for key, value in PAIRS.items()}
 
 CHECK_INTERVAL = 6
 MIN_ZIL_BALANCE = 50.0
