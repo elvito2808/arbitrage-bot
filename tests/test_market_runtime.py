@@ -43,7 +43,7 @@ class FakeRegistry:
 class MarketRuntimeTests(unittest.IsolatedAsyncioTestCase):
  async def test_generic_market_is_routed_through_configured_adapters(self):
   original=MarketRegistry.load().markets["WZIL_zUSDT"]
-  market=replace(original,market_id="GENERIC_TEST",execution_profile="generic",dex_pair_key="GENERIC_TEST")
+  market=replace(original,market_id="GENERIC_TEST",execution_profile="generic",dex_pair_key="GENERIC_TEST",dex_key="testdex")
   registry=FakeRegistry(market)
   runtime=MarketRuntime(registry,private_key="test-key",wallet_address="test-address")
   cex=FakeCex(); runtime.cex_adapters={"kucoin":cex}

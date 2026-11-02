@@ -34,6 +34,7 @@ class MarketRegistry:
             if m.enabled and not self.chains[m.chain_key].get("enabled",True): raise RegistryError(f"Market {m.market_id} uses a disabled chain")
             if (m.chain_key,m.dex_key) not in self.dexes: raise RegistryError(f"Unknown/mismatched DEX for {m.market_id}")
             if m.enabled and not self.dexes[(m.chain_key,m.dex_key)].get("enabled",True): raise RegistryError(f"Market {m.market_id} uses a disabled DEX")
+            if m.execution_profile=="generic" and not self.dexes[(m.chain_key,m.dex_key)].get("supports_generic_profile",True): raise RegistryError(f"DEX {m.dex_key} is not configured for generic execution")
             for aid in (m.base_asset_id,m.quote_asset_id):
                 if aid not in self.assets or self.assets[aid].chain_key!=m.chain_key: raise RegistryError(f"Unknown/mismatched asset {aid}")
             if not m.base_amounts_raw or any(x<=0 for x in m.base_amounts_raw): raise RegistryError(f"Invalid sizes for {m.market_id}")

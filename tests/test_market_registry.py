@@ -11,7 +11,7 @@ class Tests(unittest.TestCase):
   root=ROOT/"src"/"arbitrage_bot"/"config"
   with tempfile.TemporaryDirectory() as temp:
    d=Path(temp); markets=json.loads((root/"markets.json").read_text()); chains=json.loads((root/"chains.json").read_text()); dexes=json.loads((root/"dexes.json").read_text())
-   extra=dict(markets["markets"][1]); extra.update({"market_id":"WZIL_TEST_GENERIC","dex_pair_key":"WZIL_TEST_GENERIC","execution_profile":"generic"}); markets["markets"].append(extra)
+   extra=dict(markets["markets"][1]); extra.update({"market_id":"WZIL_TEST_GENERIC","dex_pair_key":"WZIL_TEST_GENERIC","execution_profile":"generic","dex_key":"testdex"}); markets["markets"].append(extra); dexes["dexes"].append({"dex_key":"testdex","chain_key":"zilliqa-evm","adapter":"fake.Dex","enabled":True,"supports_generic_profile":True})
    (d/"markets.json").write_text(json.dumps(markets)); (d/"chains.json").write_text(json.dumps(chains)); (d/"dexes.json").write_text(json.dumps(dexes))
    r=MarketRegistry.load(d); legacy,_,_=r.legacy_maps()
    self.assertIn("WZIL_TEST_GENERIC",[m.market_id for m in r.generic_markets()]); self.assertNotIn("WZIL_TEST_GENERIC",legacy)

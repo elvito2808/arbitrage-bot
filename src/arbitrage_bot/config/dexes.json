@@ -5,7 +5,8 @@
       "dex_key": "plunderswap",
       "chain_key": "zilliqa-evm",
       "adapter": "arbitrage_bot.cells.dexes.plunderswap.adapter.PlunderSwapAdapter",
-      "enabled": true
+      "enabled": true,
+      "supports_generic_profile": false
     }
   ]
 }
