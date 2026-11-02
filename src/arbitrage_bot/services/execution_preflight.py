@@ -115,31 +115,39 @@ def evaluate_execution_preflight(
         elif age > policy.max_quote_age_seconds:
             reasons.append("quote_stale")
 
-    if not evidence.best_bid.is_finite() or not evidence.best_ask.is_finite():
-        reasons.append("non_finite_top_of_book")
-    elif evidence.best_bid <= 0 or evidence.best_ask <= 0 or evidence.best_bid > evidence.best_ask:
+    top_valid = (
+        evidence.best_bid.is_finite() and evidence.best_ask.is_finite()
+        and evidence.best_bid > 0 and evidence.best_ask > 0
+        and evidence.best_bid <= evidence.best_ask
+    )
+    notional = None
+    if not top_valid:
         reasons.append("invalid_top_of_book")
     else:
         mid = (evidence.best_bid + evidence.best_ask) / Decimal("2")
         spread = (evidence.best_ask - evidence.best_bid) / mid
         if spread > policy.max_spread_rate:
             reasons.append("spread_too_wide")
+        reference = evidence.best_ask if side == "buy" else evidence.best_bid
+        if side in {"buy", "sell"} and quantity.is_finite() and quantity > 0:
+            notional = quantity * reference
+            if notional > policy.max_notional_quote:
+                reasons.append("order_notional_exceeds_limit")
 
     if evidence.available_base is None or evidence.available_quote is None:
         reasons.append("balance_evidence_missing")
-    else:
-        if evidence.available_base < 0 or evidence.available_quote < 0:
-            reasons.append("invalid_balance")
-        elif side == "sell" and evidence.available_base < quantity:
-            reasons.append("insufficient_base_balance")
-        elif side == "buy" and evidence.available_quote < quantity * evidence.best_ask:
-            reasons.append("insufficient_quote_balance")
+    elif evidence.available_base < 0 or evidence.available_quote < 0:
+        reasons.append("invalid_balance")
+    elif top_valid and side == "sell" and evidence.available_base < quantity:
+        reasons.append("insufficient_base_balance")
+    elif top_valid and side == "buy" and evidence.available_quote < quantity * evidence.best_ask:
+        reasons.append("insufficient_quote_balance")
 
     if evidence.pool_liquidity_quote is None:
         reasons.append("pool_liquidity_unknown")
     elif not evidence.pool_liquidity_quote.is_finite() or evidence.pool_liquidity_quote <= 0:
         reasons.append("pool_liquidity_unusable")
-    elif quantity * evidence.best_ask > evidence.pool_liquidity_quote:
+    elif notional is not None and notional > evidence.pool_liquidity_quote:
         reasons.append("trade_exceeds_observed_pool_liquidity")
 
     if evidence.estimated_gas_quote is None:
@@ -161,14 +169,13 @@ def evaluate_execution_preflight(
     impact = None
     if vwap is None:
         reasons.append("insufficient_orderbook_depth")
-    else:
+    elif top_valid:
         reference = evidence.best_ask if side == "buy" else evidence.best_bid
-        if reference > 0:
-            impact = abs(vwap - reference) / reference
-            if impact > policy.max_book_impact_rate:
-                reasons.append("orderbook_impact_exceeds_limit")
-            if impact > policy.max_slippage_rate:
-                reasons.append("slippage_limit_exceeded")
+        impact = abs(vwap - reference) / reference
+        if impact > policy.max_book_impact_rate:
+            reasons.append("orderbook_impact_exceeds_limit")
+        if impact > policy.max_slippage_rate:
+            reasons.append("slippage_limit_exceeded")
 
     return PreflightResult(
         allowed=not reasons,
