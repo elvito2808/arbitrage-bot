@@ -16,6 +16,7 @@ from arbitrage_bot.infrastructure.config import Settings
 from arbitrage_bot.infrastructure.logging import configure_logging
 from arbitrage_bot.services.market_data import MarketDataService
 from arbitrage_bot.services.shadow_analyzer import ShadowAnalyzer
+from arbitrage_bot.services.shadow_risk import ShadowRiskManager
 
 
 def _arguments() -> argparse.Namespace:
@@ -35,6 +36,7 @@ async def _run(settings: Settings, cycles: int, interval: float) -> int:
     plunderswap = PlunderSwapMarketData(rpc, legacy_config)
     market_data = MarketDataService(kucoin, plunderswap, legacy_config)
     analyzer = ShadowAnalyzer(legacy_config)
+    risk_manager = ShadowRiskManager()
 
     log = logging.getLogger("arbitrage_bot.runtime")
     log.warning("runtime_start mode=shadow live_trading_enabled=false cycles=%s interval_seconds=%s", cycles, interval)
@@ -45,13 +47,22 @@ async def _run(settings: Settings, cycles: int, interval: float) -> int:
         try:
             snapshot = await market_data.collect()
             candidates = analyzer.analyze(snapshot)
-            eligible = [candidate for candidate in candidates if candidate.legacy_eligible]
+            decisions = [(candidate, risk_manager.evaluate(candidate, snapshot)) for candidate in candidates]
+            allowed = [(candidate, decision) for candidate, decision in decisions if decision.allowed]
+            rejected = [(candidate, decision) for candidate, decision in decisions if not decision.allowed]
+            for candidate, decision in rejected:
+                log.info("shadow_risk_rejected pair=%s direction=%s reasons=%s",
+                         candidate.pair, candidate.direction, ",".join(decision.reasons))
+            for candidate, _decision in allowed:
+                log.info("shadow_risk_allowed pair=%s direction=%s level=%d profit=%s threshold=%s",
+                         candidate.pair, candidate.direction, candidate.level_index,
+                         candidate.estimated_profit_quote, candidate.required_threshold)
             log.info(
-                "shadow_cycle_complete cycle=%d observed_at=%s pairs=%d candidates=%d threshold_eligible=%d top_candidate=%s",
+                "shadow_cycle_complete cycle=%d observed_at=%s pairs=%d candidates=%d risk_allowed=%d risk_rejected=%d top_candidate=%s",
                 completed, snapshot.observed_at.isoformat(), len(snapshot.plunderswap),
-                len(candidates), len(eligible),
-                (f"{eligible[0].pair}:{eligible[0].direction}:profit={eligible[0].estimated_profit_quote}"
-                 if eligible else "none"),
+                len(candidates), len(allowed), len(rejected),
+                (f"{allowed[0][0].pair}:{allowed[0][0].direction}:profit={allowed[0][0].estimated_profit_quote}"
+                 if allowed else "none"),
             )
         except asyncio.CancelledError:
             raise
