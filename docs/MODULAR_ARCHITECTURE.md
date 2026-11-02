@@ -14,7 +14,7 @@
 - config/dexes.json: chain_key, dex_key and adapter class path.
 - config/markets.json: asset identifiers, market mappings, CEX symbol, pool/contract, raw sizes, thresholds, precision and execution profile.
 
-The MarketRegistry rejects unknown chain/DEX/asset references, mismatched chain assignments, invalid sizes and mismatched amount/threshold lists. Raw on-chain sizes are stored as decimal strings in JSON to avoid loss of integer precision.
+The MarketRegistry rejects unknown chain/DEX/asset references, mismatched chain assignments, invalid sizes, mismatched amount/threshold lists, and generic markets whose CEX currency identifiers do not match the configured assets. Raw on-chain sizes are stored as decimal strings in JSON to avoid loss of integer precision.
 
 ## Add a market
 

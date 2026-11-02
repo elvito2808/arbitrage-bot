@@ -39,6 +39,9 @@ class MarketRegistry:
             if not m.base_amounts_raw or any(x<=0 for x in m.base_amounts_raw): raise RegistryError(f"Invalid sizes for {m.market_id}")
             if len(m.base_amounts_raw)!=len(m.profit_thresholds_quote): raise RegistryError(f"Size/threshold count mismatch for {m.market_id}")
             if not m.cex_symbol or "-" not in m.cex_symbol: raise RegistryError(f"Invalid CEX symbol for {m.market_id}")
+            if m.execution_profile=="generic":
+                if self.assets[m.base_asset_id].cex_currency != m.cex_base_currency: raise RegistryError(f"Base asset/CEX currency mismatch for {m.market_id}")
+                if self.assets[m.quote_asset_id].cex_currency != m.cex_quote_currency: raise RegistryError(f"Quote asset/CEX currency mismatch for {m.market_id}")
             if not 0 <= m.cex_fee_rate < 1: raise RegistryError(f"Invalid CEX fee rate for {m.market_id}")
     def enabled_markets(self): return tuple(m for m in self.markets.values() if m.enabled)
     def generic_markets(self): return tuple(m for m in self.enabled_markets() if m.execution_profile=="generic")
