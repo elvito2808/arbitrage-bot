@@ -403,10 +403,14 @@ async def check_arbitrage():
 
     if not any(sell is not None and buy is not None for sell, buy in kucoin_prices.values()):
         logging.warning("KuCoin price missing, skipping cycle", extra=add_log_context())
+        if market_runtime is not None:
+            await market_runtime.run_cycle()
         await asyncio.sleep(CHECK_INTERVAL)
         return
     if not pl_prices:
         logging.warning("No valid prices from Plunderswap", extra=add_log_context())
+        if market_runtime is not None:
+            await market_runtime.run_cycle()
         await asyncio.sleep(CHECK_INTERVAL)
         return
 
@@ -540,6 +544,8 @@ async def check_arbitrage():
         logging.info("No Arbitrage", extra=add_log_context())
         if cycle_request_count:
             logging.info(f"API requests this cycle: {cycle_request_count}")
+        if market_runtime is not None:
+            await market_runtime.run_cycle()
         await asyncio.sleep(CHECK_INTERVAL)
         return
 
