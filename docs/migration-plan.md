@@ -39,3 +39,26 @@
 - No real order/transaction is sent during automated tests or the current server smoke test.
 - Any future controlled live validation requires explicit size/risk caps, operator supervision, and verified actual fills/fees.
 - User explicitly approves promotion. Passing automated tests alone is not authorization to merge.
+
+
+## Phase 2 execution work (in progress; not production-ready)
+
+- Added independent preflight gates for quote freshness, spread, depth/VWAP,
+  impact/slippage, balances, observed pool liquidity, gas cap, chain ID, router
+  allowlisting, token allowance, minimum edge, and per-order notional.
+- Added a SQLite journal with a duplicate trade-key guard and explicit lifecycle
+  statuses. A second-leg failure after first-leg confirmation is marked for
+  manual reconciliation; no blind retry or automatic compensation is performed.
+- Added isolated KuCoin authenticated market-order support with balance checks,
+  an order-book read, a per-order notional cap, and explicit acknowledgement.
+- Added isolated PlunderSwap V2/V3 signed-swap support with balance/allowance
+  checks, simulation, gas estimation/caps, slippage bounds, chain/router checks,
+  receipt confirmation, and no automatic approvals.
+- Added coordinator tests for fail-closed preflight and partial execution.
+- **Still pending:** wire the adapters to the actual strategy using verified
+  asset mappings and pre-funded balances; add mocked adapter tests for KuCoin
+  auth/order responses and EVM transaction failures; validate all token decimals,
+  order increments/minimums and actual fee tiers; fixed-fixture legacy parity;
+  then supervised operator-run testing.
+- The existing shadow app remains unchanged and cannot place orders or submit
+  swaps. Do not merge or enable real execution until the pending gates pass.
