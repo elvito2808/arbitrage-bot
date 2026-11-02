@@ -3,39 +3,39 @@
 ## Production protection
 
 - `main` remains untouched throughout refactoring.
-- Work occurs on `refactor/modular-monolith-phase-1` and subsequent refactor branches.
-- No merge or replacement until unit/integration tests pass, legacy-vs-new behavior is compared, and the operator completes a controlled real-environment validation.
-- Live order execution remains disabled during the scaffold phase.
+- Work occurs on `refactor/modular-monolith-phase-1`.
+- The pull request remains Draft and must not be merged until unit/integration tests pass, legacy-vs-new behavior is compared, and the operator completes a controlled real-environment validation.
+- The current refactor runtime is read-only shadow mode. It cannot submit orders or transactions.
 
-## Current legacy-to-target mapping
+## Legacy-to-target mapping
 
 | Existing component | Current responsibility | Target |
 |---|---|---|
-| `main_bot.py` | Main loop, balances, opportunity logic, coordination, logging, notifications, retries, execution | `app.py` composition root; `services/market_data.py`, `services/opportunity_engine.py`, `services/risk_manager.py`, `services/portfolio.py`, `services/execution_coordinator.py` |
-| `dex_plunderswap.py` | PlunderSwap V2/V3 pool reads, quote calculations, liquidity/cache, swaps | `cells/dexes/plunderswap/` with read-only quote code separated from write execution |
-| `kucoin_client.py` | KuCoin auth, REST/WebSocket market data, balances and market orders | `cells/cex/kucoin/` split into auth, market data, balances and order execution |
-| `rpc_manager.py` | RPC failover, Web3 and contracts, private key and wallet, transaction-related access | `cells/networks/zilliqa_evm/` plus a narrowly scoped signer; RPC connectivity must not own policy |
-| `constants.py` | Contract addresses, token/pair configuration, thresholds, timing, ABI loading and log paths | `config/` for environment-specific settings; `resources/abis/` for ABI data; typed config validation |
-| `logging_utils.py` and local error helpers | Shared and duplicated error counters/logging | `infrastructure/logging.py` and structured error/metrics services |
-| `approve_tokens.py` | Token approvals | Keep in `scripts/`, manual-only with explicit confirmation and target/network display |
+| `main_bot.py` | Main loop, balances, opportunity logic, coordination, logging, notifications, retries, execution | `app.py` composition root and service orchestration; legacy entry point remains unchanged |
+| `dex_plunderswap.py` | PlunderSwap V2/V3 pool reads, quote calculations, liquidity/cache, swaps | `cells/dexes/plunderswap/market_data.py`, protocol math modules, disabled `swaps.py` boundary |
+| `kucoin_client.py` | KuCoin auth, REST/WebSocket market data, balances and market orders | Public `cells/cex/kucoin/market_data.py`; order boundary separate and disabled |
+| `rpc_manager.py` | RPC failover, Web3 and contracts, private key and wallet, transaction-related access | Read-only `cells/networks/zilliqa_evm/read_only_rpc.py`; signing/submission boundary is separate and disabled |
+| `constants.py` | Contract addresses, token/pair configuration, thresholds, timing, ABI loading and log paths | Typed runtime settings plus legacy configuration/ABI source for this initial read-only preview; full config/resource extraction remains |
+| `logging_utils.py` and local error helpers | Shared and duplicated error counters/logging | `infrastructure/logging.py`; structured runtime logs are now emitted |
+| `approve_tokens.py` | Token approvals | Keep manual-only and out of runtime imports |
 | `github_access_test.py` | Developer connectivity diagnostic | Keep as developer tooling; not a trading correctness test |
 
-## Phases
+## Phases and current state
 
-1. **Scaffold (current):** domain contracts, pure services, unit tests, architecture docs. No production entry-point change.
-2. **Characterization:** record existing calculation behavior with fixtures and tests, including V2/V3 math, decimals, fees, slippage, and failure cases.
-3. **Read-only adapters:** move market-data access behind interfaces while comparing quote output to the legacy implementation.
-4. **Opportunity/risk extraction:** move pure calculations and risk gates; run both implementations in shadow mode and compare decisions.
-5. **Execution isolation:** separate order/transaction writes, approvals, key access, and receipt/fill verification. Require explicit live-trading opt-in.
-6. **Controlled integration:** test against mocks, testnet or read-only live market data first; then a small, capped real-environment validation only after all previous gates pass.
-7. **Promotion:** only after written acceptance, review diff, verify rollback, and explicitly approve merge to `main`.
+1. **Foundation — implemented:** domain models, interfaces, pure opportunity/risk services, unit tests, architecture docs.
+2. **Read-only adapters — implemented for initial shadow scope:** KuCoin public level-1 quote, Zilliqa EVM read-only RPC, PlunderSwap V2/V3 pool quotes, and a no-signing shadow entry point. Needs server smoke testing.
+3. **Shadow opportunity/risk orchestration — implemented for initial comparison:** logs both arbitrage directions per configured amount, threshold eligibility, snapshot age, and risk reasons. It is not a live-trading authorization system.
+4. **Regression/characterization — in progress:** deterministic V2/V3 math tests exist. Need a fixed dataset comparing quote outputs and opportunity decisions against legacy `dex_plunderswap.py` and `main_bot.py`, including rounding and token decimal differences.
+5. **Execution isolation — boundary established, execution not implemented:** order/transaction writes fail closed. Do not enable live execution in this preview.
+6. **Controlled integration — pending:** first run one read-only cycle on the server, then a short supervised shadow session. Review logs and correct RPC, ABI, decimal, pricing, and data freshness issues. No real transaction should be sent.
+7. **Promotion — pending:** only after tests, parity review, controlled environment validation, rollback plan, and explicit user approval. Never merge automatically.
 
 ## Required acceptance gates
 
-- Unit tests pass on the supported Python version.
-- Tests cover price direction, fee application, token decimals, stale quotes, missing quotes, low liquidity, insufficient balances, RPC failures, partial fills, failed/reverted transactions, and duplicate execution prevention.
+- Unit tests pass on Python 3.10 and 3.12.
+- Tests cover price direction, fee application, token decimals, stale snapshots, missing data, invalid quotes, low liquidity, insufficient balances, RPC failures, partial fills, failed/reverted transactions, and duplicate execution prevention before any live execution module is added.
 - No private keys, API secrets, account data, or signed payloads appear in logs or committed config.
 - Shadow-mode decisions match the legacy bot on a fixed dataset, or every difference is explained and accepted.
-- No real order/transaction is sent during automated tests.
-- Controlled live validation has explicit size/risk caps, operator supervision, and verified actual fills/fees.
+- No real order/transaction is sent during automated tests or the current server smoke test.
+- Any future controlled live validation requires explicit size/risk caps, operator supervision, and verified actual fills/fees.
 - User explicitly approves promotion. Passing automated tests alone is not authorization to merge.
