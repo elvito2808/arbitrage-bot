@@ -56,7 +56,8 @@
       ],
       "cex_base_decimals": 18,
       "cex_size_precision": 4,
-      "legacy_quote_scale": 1000000
+      "legacy_quote_scale": 1000000,
+      "cex_fee_rate": 0.001
     },
     {
       "market_id": "WZIL_zUSDT",
@@ -90,7 +91,8 @@
       ],
       "cex_base_decimals": 18,
       "cex_size_precision": 4,
-      "legacy_quote_scale": 1
+      "legacy_quote_scale": 1,
+      "cex_fee_rate": 0.001
     }
   ]
 }

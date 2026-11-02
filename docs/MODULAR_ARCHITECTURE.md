@@ -3,7 +3,7 @@
 ## Architecture
 
 - KuCoin is the sole CEX integration. Its price client accepts a market symbol, maintains separate REST caches by symbol, and only uses the existing WebSocket feed for ZIL-USDT.
-- Markets, assets, chains, DEX deployments, trade sizes and per-size profit thresholds are configuration-driven.
+- Markets, assets, chains, DEX deployments, trade sizes and per-size profit thresholds and per-market CEX fee rates are configuration-driven.
 - Chain adapters own network RPC and chain-level balances; DEX adapters own quote normalization, pool math, transaction construction and DEX-side balance checks.
 - DEX adapter instances are registered by (chain_key, dex_key), so identical DEX names on different networks do not share runtime state.
 - The generic MarketRuntime loads configured adapters and processes markets with execution_profile set to generic. The legacy Zilliqa/WZIL strategy remains a separate path.
