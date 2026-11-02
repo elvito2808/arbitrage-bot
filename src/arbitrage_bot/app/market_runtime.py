@@ -42,7 +42,10 @@ class MarketRuntime:
    for key in dict.fromkeys((m.chain_key,m.dex_key) for m in markets):
     cfg=self.registry.dexes[key]; cls=self._load_class(cfg["adapter"])
     chain_private_key,chain_wallet=self._chain_credentials[key[0]]
-    adapter=self._construct(cls,{"chain_key":key[0],"dex_key":key[1],"chain_adapter":self.chain_registry.get(key[0]),"wallet_address":chain_wallet,"private_key":chain_private_key,"legacy_rpc_manager":self.legacy_rpc_manager,"market_registry":self.registry})
+    adapter_kwargs={"chain_key":key[0],"dex_key":key[1],"chain_adapter":self.chain_registry.get(key[0]),"wallet_address":chain_wallet,"private_key":chain_private_key,"market_registry":self.registry}
+    if key[0]=="zilliqa-evm":
+     adapter_kwargs["legacy_rpc_manager"]=self.legacy_rpc_manager
+    adapter=self._construct(cls,adapter_kwargs)
     if hasattr(adapter,"bind_runtime") and self.legacy_rpc_manager is not None and key[0]=="zilliqa-evm":
      adapter.bind_runtime(self.legacy_rpc_manager,chain_wallet,chain_private_key)
     self.dex_registry.register(adapter)
