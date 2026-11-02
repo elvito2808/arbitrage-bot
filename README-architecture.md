@@ -53,3 +53,17 @@ The log file is `logs/arbitrage_refactor_shadow.log`. Send the log output back f
 A successful run only demonstrates that public data retrieval and shadow calculations worked for that session. It does not prove execution profitability or production readiness. Do not enable live trading and do not merge this branch into `main` until quote math is compared against the legacy implementation, edge cases and risk checks are covered, and controlled real-environment validation is completed with explicit operator approval.
 
 See [docs/architecture.md](docs/architecture.md) and [docs/migration-plan.md](docs/migration-plan.md).
+
+
+## Execution components added (not connected to the shadow runner)
+
+This branch now includes isolated components for guarded KuCoin spot orders,
+guarded PlunderSwap V2/V3 swaps, independent preflight risk gates, a persistent
+SQLite idempotency journal, and a two-leg coordinator with explicit partial-fill/
+manual-reconciliation state. See [docs/live-execution-gates.md](docs/live-execution-gates.md).
+
+**Important:** `python -m arbitrage_bot.app` remains read-only. These write
+adapters have not yet been integrated into an executable live entry point and
+have not been validated against live trading APIs or transactions. Do not set
+the app to live mode or manually invoke write adapters before the remaining
+integration tests, token/decimal reconciliation, and network-operability checks.
