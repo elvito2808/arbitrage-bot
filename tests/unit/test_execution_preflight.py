@@ -88,6 +88,11 @@ class ExecutionPreflightTests(unittest.TestCase):
         result = self.evaluate(expected_net_profit_quote=Decimal("0.01"))
         self.assertIn("net_profit_below_minimum", result.reasons)
 
+    def test_order_notional_above_policy_cap_rejected(self):
+        policy = ExecutionPolicy(max_notional_quote=Decimal("5"))
+        result = self.evaluate(policy=policy)
+        self.assertIn("order_notional_exceeds_limit", result.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()
