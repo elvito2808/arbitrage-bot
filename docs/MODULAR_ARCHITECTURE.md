@@ -37,4 +37,4 @@ The generic runtime performs one DEX operation and then one KuCoin operation. If
 
 The main branch and the previous behavior-preserving branch remain unchanged. This work stays on its separate draft branch and is not merged.
 
-KuCoin order sizing receives the market's configured base-token decimals and size precision explicitly; it does not infer those values from a hard-coded token name.
+KuCoin order sizing receives the on-chain base asset's decimals and market-specific size precision explicitly; it does not infer those values from a hard-coded token name.

@@ -11,7 +11,7 @@ class Market:
     market_id:str; enabled:bool; execution_profile:str; chain_key:str; dex_key:str; dex_pair_key:str
     cex_key:str; cex_symbol:str; cex_base_currency:str; cex_quote_currency:str; base_asset_id:str; quote_asset_id:str
     pool:str; version:str; fee_bps:int; fee_percent:float; default_gas:int; base_amounts_raw:tuple[int,...]
-    profit_thresholds_quote:tuple[float,...]; cex_base_decimals:int; cex_size_precision:int; legacy_quote_scale:int
+    profit_thresholds_quote:tuple[float,...]; cex_base_decimals:int; cex_size_precision:int; legacy_quote_scale:int; base_decimals:int; quote_decimals:int
 class RegistryError(ValueError): pass
 class MarketRegistry:
     def __init__(self,assets,markets,chains,dexes):
@@ -25,7 +25,7 @@ class MarketRegistry:
         for v in raw["markets"]:
             k=v["market_id"]
             if k in markets: raise RegistryError(f"Duplicate market_id: {k}")
-            markets[k]=Market(k,bool(v.get("enabled",True)),v["execution_profile"],v["chain_key"],v["dex_key"],v.get("dex_pair_key",k),v["cex_key"],v["cex_symbol"],v["cex_base_currency"],v["cex_quote_currency"],v["base_asset_id"],v["quote_asset_id"],v["pool"],v["version"],int(v["fee_bps"]),float(v["fee_percent"]),int(v["default_gas"]),tuple(int(x) for x in v["base_amounts_raw"]),tuple(float(x) for x in v["profit_thresholds_quote"]),int(v.get("cex_base_decimals",18)),int(v.get("cex_size_precision",4)),int(v.get("legacy_quote_scale",1)))
+            markets[k]=Market(k,bool(v.get("enabled",True)),v["execution_profile"],v["chain_key"],v["dex_key"],v.get("dex_pair_key",k),v["cex_key"],v["cex_symbol"],v["cex_base_currency"],v["cex_quote_currency"],v["base_asset_id"],v["quote_asset_id"],v["pool"],v["version"],int(v["fee_bps"]),float(v["fee_percent"]),int(v["default_gas"]),tuple(int(x) for x in v["base_amounts_raw"]),tuple(float(x) for x in v["profit_thresholds_quote"]),int(v.get("cex_base_decimals",18)),int(v.get("cex_size_precision",4)),int(v.get("legacy_quote_scale",1)),assets[v["base_asset_id"]].decimals,assets[v["quote_asset_id"]].decimals)
         return cls(assets,markets,{v["chain_key"]:v for v in chains},{(v["chain_key"],v["dex_key"]):v for v in dexes})
     def validate(self):
         for m in self.markets.values():
