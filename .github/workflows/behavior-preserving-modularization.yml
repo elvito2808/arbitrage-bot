@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - refactor/behavior-preserving-modularization
+      - refactor/multi-market-multichain-core
   pull_request:
     branches:
       - main
