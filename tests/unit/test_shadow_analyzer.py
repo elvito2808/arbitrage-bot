@@ -24,7 +24,7 @@ class ShadowAnalyzerTests(unittest.TestCase):
             kucoin_bid=Decimal("2"),
             kucoin_ask=Decimal("2.1"),
             plunderswap={
-                "TEST": [(1.9, 2.0, 2_000_000, 2_200_000, 1_000_000_000_000_000_000)]
+                "TEST": [(1.9, 2.0, 1_000_000, 2_200_000, 1_000_000_000_000_000_000)]
             },
         )
         candidates = ShadowAnalyzer(Config).analyze(snapshot)
