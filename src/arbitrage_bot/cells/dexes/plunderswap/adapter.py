@@ -19,9 +19,9 @@ class PlunderSwapAdapter(DexAdapter):
    amount=market.base_amounts_raw[i]
    out.append(DexQuote(amount/(10**18),float(item[2])/scale,float(item[3])/scale,amount))
   return out
- async def check_balance(self,market,direction,amount_raw,cex_buy_price=None):
+ async def check_balance(self,market,direction,amount_raw,quote=None,cex_price=None):
   legacy_dir="TOKEN_TO_ZIL" if direction=="DEX_TO_CEX" else "ZIL_TO_TOKEN"
-  return await legacy_client.check_wallet_balance(pair=market.dex_pair_key,direction=legacy_dir,kucoin_buy_price=cex_buy_price,zil_amount_int=amount_raw,cached_prices=self.last_valid_price.get(market.market_id))
+  return await legacy_client.check_wallet_balance(pair=market.dex_pair_key,direction=legacy_dir,kucoin_buy_price=cex_price,zil_amount_int=amount_raw,cached_prices=self.last_valid_price.get(market.market_id))
  async def swap(self,market,direction,amount_raw,quote=None):
   legacy_dir="TOKEN_TO_ZIL" if direction=="DEX_TO_CEX" else "ZIL_TO_TOKEN"
   return await legacy_client.plunderswap_swap(direction=legacy_dir,pair=market.dex_pair_key,zil_amount_int=amount_raw,cached_prices=self.last_valid_price.get(market.market_id))

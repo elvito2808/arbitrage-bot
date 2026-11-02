@@ -66,7 +66,7 @@ class MarketRuntime:
     opp=max(opportunities,key=lambda item:item.profit_quote)
     if not await cex.check_balance(market,opp.direction,opp.amount_raw,opp.cex_price):
      logging.warning("Generic market %s skipped: insufficient KuCoin balance",market.market_id); continue
-    balance=await dex.check_balance(market,opp.direction,opp.amount_raw,opp.cex_price if opp.direction=="CEX_TO_DEX" else None)
+    balance=await dex.check_balance(market=market,direction=opp.direction,amount_raw=opp.amount_raw,quote=opp.dex_quote,cex_price=opp.cex_price)
     if isinstance(balance,tuple): balance=balance[0]
     if not balance: logging.warning("Generic market %s skipped: insufficient DEX balance",market.market_id); continue
     dex_result=await dex.swap(market=market,direction=opp.direction,amount_raw=opp.amount_raw,quote=opp.dex_quote)
