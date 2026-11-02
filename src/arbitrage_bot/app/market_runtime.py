@@ -1,6 +1,6 @@
 """Runtime coordinator for generic-profile markets; legacy Zilliqa strategy stays isolated."""
 from __future__ import annotations
-import importlib, inspect, logging
+import importlib, inspect, logging, os
 from arbitrage_bot.cells.cex.kucoin.adapter import KuCoinAdapter
 from arbitrage_bot.cells.dexes.registry import DexRegistry
 from arbitrage_bot.chains.registry import ChainRegistry
@@ -9,7 +9,7 @@ from arbitrage_bot.strategy.engine import ArbitrageEngine, CexQuote
 class MarketRuntime:
  def __init__(self,registry,private_key,wallet_address,legacy_rpc_manager=None):
   self.registry,self.private_key,self.wallet_address=registry,private_key,wallet_address
-  self.legacy_rpc_manager=legacy_rpc_manager; self.chain_registry=ChainRegistry(); self.dex_registry=DexRegistry()
+  self.legacy_rpc_manager=legacy_rpc_manager; self.chain_registry=ChainRegistry(); self.dex_registry=DexRegistry(); self._chain_credentials={}
   self.cex_adapters={"kucoin":KuCoinAdapter()}; self.engine=ArbitrageEngine(); self._ready=False
  @staticmethod
  def _load_class(path):
@@ -22,21 +22,29 @@ class MarketRuntime:
  async def _prepare(self):
   markets=self.registry.generic_markets()
   if not markets: self._ready=True; return True
-  self.chain_registry=ChainRegistry(); self.dex_registry=DexRegistry()
+  self.chain_registry=ChainRegistry(); self.dex_registry=DexRegistry(); self._chain_credentials={}
   try:
    for key in dict.fromkeys(m.chain_key for m in markets):
     cfg=self.registry.chains[key]
+    key_env=cfg.get("private_key_env")
+    chain_private_key=os.getenv(key_env) if key_env else self.private_key
+    if key_env and not chain_private_key: raise RuntimeError(f"Missing environment variable {key_env} for chain {key}")
+    address_env=cfg.get("wallet_address_env")
+    chain_wallet=os.getenv(address_env) if address_env else self.wallet_address
+    if address_env and not chain_wallet: raise RuntimeError(f"Missing environment variable {address_env} for chain {key}")
+    self._chain_credentials[key]=(chain_private_key,chain_wallet)
     path=cfg.get("adapter_class") or ("arbitrage_bot.chains.evm.adapter.EVMChainAdapter" if cfg.get("family")=="evm" else None)
     if not path: raise RuntimeError(f"No adapter_class configured for chain {key}")
     cls=self._load_class(path)
-    adapter=self._construct(cls,{"chain_key":key,"rpc_urls":cfg.get("rpc_urls",[]),"private_key":self.private_key,"wallet_address":self.wallet_address,"config":cfg})
+    adapter=self._construct(cls,{"chain_key":key,"rpc_urls":cfg.get("rpc_urls",[]),"private_key":chain_private_key,"wallet_address":chain_wallet,"config":cfg})
     if not await adapter.connect(): raise RuntimeError(f"Could not connect to chain {key}")
     self.chain_registry.register(adapter)
    for key in dict.fromkeys((m.chain_key,m.dex_key) for m in markets):
     cfg=self.registry.dexes[key]; cls=self._load_class(cfg["adapter"])
-    adapter=self._construct(cls,{"chain_key":key[0],"dex_key":key[1],"chain_adapter":self.chain_registry.get(key[0]),"wallet_address":self.wallet_address,"private_key":self.private_key,"legacy_rpc_manager":self.legacy_rpc_manager,"market_registry":self.registry})
+    chain_private_key,chain_wallet=self._chain_credentials[key[0]]
+    adapter=self._construct(cls,{"chain_key":key[0],"dex_key":key[1],"chain_adapter":self.chain_registry.get(key[0]),"wallet_address":chain_wallet,"private_key":chain_private_key,"legacy_rpc_manager":self.legacy_rpc_manager,"market_registry":self.registry})
     if hasattr(adapter,"bind_runtime") and self.legacy_rpc_manager is not None and key[0]=="zilliqa-evm":
-     adapter.bind_runtime(self.legacy_rpc_manager,self.wallet_address,self.private_key)
+     adapter.bind_runtime(self.legacy_rpc_manager,chain_wallet,chain_private_key)
     self.dex_registry.register(adapter)
    self._ready=True; return True
   except Exception:

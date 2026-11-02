@@ -38,3 +38,5 @@ The generic runtime performs one DEX operation and then one KuCoin operation. If
 The main branch and the previous behavior-preserving branch remain unchanged. This work stays on its separate draft branch and is not merged.
 
 KuCoin order sizing receives the on-chain base asset's decimals and market-specific size precision explicitly; it does not infer those values from a hard-coded token name.
+
+For a non-EVM chain, chains.json may specify private_key_env and wallet_address_env. These are environment-variable names, not secret values. The runtime requires those variables to be present and passes the chain-specific credentials only to that chain's adapters.
