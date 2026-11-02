@@ -185,6 +185,31 @@ async def kucoin_websocket_listener():
             await asyncio.sleep(reconnect_delay)
             reconnect_delay = min(reconnect_delay * 2, max_delay)
             
+async def kucoin_get_balance(currency):
+    """Return available trade-account balance for a currency, or None on failure."""
+    global http_session
+    if http_session is None or http_session.closed:
+        http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12, connect=5))
+    endpoint = f"/api/v1/accounts?currency={currency}&type=trade"
+    try:
+        headers = kucoin_sign("GET", endpoint)
+        async with http_session.get(KUCOIN_BASE_URL + endpoint, headers=headers, timeout=15) as response:
+            if response.status != 200:
+                logging.warning(f"KuCoin balance HTTP status={response.status} currency={currency}", extra=add_log_context())
+                return None
+            payload = await response.json()
+            if payload.get("code") != "200000":
+                logging.warning(f"KuCoin balance API error for {currency}: {payload.get('msg')}", extra=add_log_context())
+                return None
+            rows = payload.get("data") or []
+            for row in rows:
+                if row.get("currency") == currency and row.get("type") == "trade":
+                    return float(row.get("available", 0))
+            return 0.0
+    except Exception as exc:
+        await log_error("kucoin_get_balance", f"Failed to fetch KuCoin balance for {currency}: {exc}", exc)
+        return None
+
 async def kucoin_swap(direction, pair, zil_amount_int, price, **kwargs):
     global http_session, last_valid_price, _order_counter_callback
     if http_session is None or http_session.closed:

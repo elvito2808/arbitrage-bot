@@ -26,7 +26,7 @@ class MarketRegistry:
             k=v["market_id"]
             if k in markets: raise RegistryError(f"Duplicate market_id: {k}")
             markets[k]=Market(k,bool(v.get("enabled",True)),v["execution_profile"],v["chain_key"],v["dex_key"],v.get("dex_pair_key",k),v["cex_key"],v["cex_symbol"],v["cex_base_currency"],v["cex_quote_currency"],v["base_asset_id"],v["quote_asset_id"],v["pool"],v["version"],int(v["fee_bps"]),float(v["fee_percent"]),int(v["default_gas"]),tuple(int(x) for x in v["base_amounts_raw"]),tuple(float(x) for x in v["profit_thresholds_quote"]),int(v.get("cex_base_decimals",18)),int(v.get("cex_size_precision",4)),int(v.get("legacy_quote_scale",1)))
-        return cls(assets,markets,{v["chain_key"]:v for v in chains},{v["dex_key"]:v for v in dexes})
+        return cls(assets,markets,{v["chain_key"]:v for v in chains},{(v["chain_key"],v["dex_key"]):v for v in dexes})
     def validate(self):
         for m in self.markets.values():
             if m.chain_key not in self.chains: raise RegistryError(f"Unknown chain for {m.market_id}")
