@@ -28,6 +28,8 @@ class MarketDataService:
 
     async def collect(self) -> MarketSnapshot:
         pairs = list(self.config.PAIRS)
+        # Establish one shared read-only RPC connection before concurrent pool reads.
+        await asyncio.to_thread(self.plunderswap.rpc.get_web3)
         kucoin_task = self.kucoin.get_best_bid_ask("ZIL-USDT")
         dex_tasks = [self.plunderswap.get_prices(pair) for pair in pairs]
         results = await asyncio.gather(kucoin_task, *dex_tasks, return_exceptions=True)
