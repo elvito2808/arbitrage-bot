@@ -41,6 +41,14 @@ class MarketRuntime:
    self._ready=True; return True
   except Exception:
    logging.exception("Could not initialize generic market adapters"); return False
+ async def _retry(self,func,**kwargs):
+  last=None
+  for attempt in range(2):
+   try: return await func(**kwargs)
+   except Exception as exc:
+    last=exc
+    if attempt==0: await asyncio.sleep(1)
+  logging.error("Adapter operation failed after retry: %s",last); return False,None
  async def run_cycle(self):
   markets=self.registry.generic_markets()
   if not markets: return
@@ -61,10 +69,10 @@ class MarketRuntime:
     balance=await dex.check_balance(market,opp.direction,opp.amount_raw,opp.cex_price if opp.direction=="CEX_TO_DEX" else None)
     if isinstance(balance,tuple): balance=balance[0]
     if not balance: logging.warning("Generic market %s skipped: insufficient DEX balance",market.market_id); continue
-    dex_result=await dex.swap(market=market,direction=opp.direction,amount_raw=opp.amount_raw,quote=opp.dex_quote)
+    dex_result=await self._retry(dex.swap,market=market,direction=opp.direction,amount_raw=opp.amount_raw,quote=opp.dex_quote)
     if not dex_result or not dex_result[0]: logging.warning("DEX execution failed for %s",market.market_id); continue
     cex_direction="QUOTE_TO_BASE" if opp.direction=="CEX_TO_DEX" else "BASE_TO_QUOTE"
-    cex_result=await cex.swap(market=market,direction=cex_direction,amount_raw=opp.amount_raw,price=opp.cex_price)
+    cex_result=await self._retry(cex.swap,market=market,direction=cex_direction,amount_raw=opp.amount_raw,price=opp.cex_price)
     if not cex_result or not cex_result[0]:
      logging.error("CEX execution failed after DEX execution for %s; reconciliation may be required",market.market_id); continue
     logging.info("Generic arbitrage executed for %s direction=%s estimated_profit=%s",market.market_id,opp.direction,opp.profit_quote)

@@ -36,3 +36,5 @@ The generic runtime routes new generic-profile markets through the configured ch
 The generic runtime performs one DEX operation and then one KuCoin operation. If the second leg fails after the first succeeds, it logs that reconciliation may be required. It does not automatically retry potentially non-idempotent live orders/transactions. The legacy strategy's existing retry and simulator behavior remains unchanged.
 
 The main branch and the previous behavior-preserving branch remain unchanged. This work stays on its separate draft branch and is not merged.
+
+KuCoin order sizing receives the market's configured base-token decimals and size precision explicitly; it does not infer those values from a hard-coded token name.
