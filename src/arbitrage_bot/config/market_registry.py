@@ -29,6 +29,7 @@ class MarketRegistry:
         return cls(assets,markets,{v["chain_key"]:v for v in chains},{(v["chain_key"],v["dex_key"]):v for v in dexes})
     def validate(self):
         for m in self.markets.values():
+            if m.execution_profile not in {"legacy_zilliqa_wzil","generic"}: raise RegistryError(f"Unsupported execution profile for {m.market_id}: {m.execution_profile}")
             if m.chain_key not in self.chains: raise RegistryError(f"Unknown chain for {m.market_id}")
             if (m.chain_key,m.dex_key) not in self.dexes: raise RegistryError(f"Unknown/mismatched DEX for {m.market_id}")
             for aid in (m.base_asset_id,m.quote_asset_id):

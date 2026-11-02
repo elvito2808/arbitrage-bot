@@ -11,4 +11,4 @@ class KuCoinAdapter(CexAdapter):
   required=amount if direction=="DEX_TO_CEX" else amount*price*1.001
   return balance>=required
  async def swap(self,market,direction,amount_raw,price):
-  return await client.kucoin_swap(direction=direction,pair=market.market_id,zil_amount_int=amount_raw,price=price,symbol=market.cex_symbol)
+  return await client.kucoin_swap(direction=direction,pair=market.market_id,zil_amount_int=amount_raw,price=price,symbol=market.cex_symbol,base_decimals=market.cex_base_decimals,size_precision=market.cex_size_precision)

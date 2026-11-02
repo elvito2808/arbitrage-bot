@@ -218,8 +218,8 @@ async def kucoin_swap(direction, pair, zil_amount_int, price, **kwargs):
     market_config = PAIRS.get(pair, {})
     symbol = kwargs.get("symbol") or market_config.get("cex_symbol", "ZIL-USDT")
     side = "buy" if direction in ("USDT_TO_ZIL", "QUOTE_TO_BASE") else "sell"
-    base_decimals = int(market_config.get("cex_base_decimals", 18))
-    size_precision = int(market_config.get("cex_size_precision", 4))
+    base_decimals = int(kwargs.get("base_decimals", market_config.get("cex_base_decimals", 18)))
+    size_precision = int(kwargs.get("size_precision", market_config.get("cex_size_precision", 4)))
     zil_amount = zil_amount_int / (10 ** base_decimals)
     size = round(zil_amount, size_precision)
     order = {
