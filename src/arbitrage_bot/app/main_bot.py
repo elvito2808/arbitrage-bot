@@ -700,6 +700,8 @@ async def main_loop():
     global consecutive_failures, simulation_mode, simulation_start_time
 
     logging.info("Starting Arbitrage Bot (v1.1.0)", extra=add_log_context())
+    legacy_enabled = bool(PAIRS)
+    generic_markets = MARKET_REGISTRY.generic_markets()
     
     from constants import ZUSDC_ABI, PLUNDER_PAIR_ABI, FULL_ROUTER_ABI, TOKEN_ABI, PAIR_ABI
     if any(abi is None for abi in [ZUSDC_ABI, PLUNDER_PAIR_ABI, FULL_ROUTER_ABI, TOKEN_ABI, PAIR_ABI]):
@@ -716,26 +718,35 @@ async def main_loop():
     WALLET_ADDRESS = temp_w3.to_checksum_address(account.address)
     logging.info(f"Wallet address: {WALLET_ADDRESS}", extra=add_log_context())
 
-    rpc_manager = RPCManager(METAMASK_PRIVATE_KEY, WALLET_ADDRESS)
-    rpc_manager.set_telegram_sender(send_message)
-    
-    def increment_rpc():
-        global cycle_request_count
-        cycle_request_count['total_rpc'] = cycle_request_count.get('total_rpc', 0) + 1
-    rpc_manager.set_counter_callback(increment_rpc)
+    rpc_manager = None
+    w3 = None
+    router_contract = None
+    contracts = {}
+    if legacy_enabled:
+        candidate_rpc_manager = RPCManager(METAMASK_PRIVATE_KEY, WALLET_ADDRESS)
+        candidate_rpc_manager.set_telegram_sender(send_message)
 
-    if not await rpc_manager.ensure_connection():
-        await send_message("Critical error: Failed to establish RPC connection")
-        return
+        def increment_rpc():
+            global cycle_request_count
+            cycle_request_count['total_rpc'] = cycle_request_count.get('total_rpc', 0) + 1
+        candidate_rpc_manager.set_counter_callback(increment_rpc)
 
-    w3 = rpc_manager.get_w3()
-    contracts = rpc_manager.get_tx_contracts()
-    router_contract = contracts["router"]
-    
-    dex.rpc_manager = rpc_manager
+        if await candidate_rpc_manager.ensure_connection():
+            rpc_manager = candidate_rpc_manager
+            w3 = rpc_manager.get_w3()
+            contracts = rpc_manager.get_tx_contracts()
+            router_contract = contracts["router"]
+            dex.rpc_manager = rpc_manager
+        else:
+            await send_message("Warning: Zilliqa RPC unavailable; legacy markets disabled for this run. Generic markets will continue independently.")
+            logging.error("Zilliqa RPC unavailable; continuing without legacy markets", extra=add_log_context())
+            legacy_enabled = False
+            dex.rpc_manager = None
+
     dex.WALLET_ADDRESS = WALLET_ADDRESS
     dex.METAMASK_PRIVATE_KEY = METAMASK_PRIVATE_KEY
     market_runtime = MarketRuntime(MARKET_REGISTRY, METAMASK_PRIVATE_KEY, WALLET_ADDRESS, rpc_manager)
+
 
     if http_session is None or http_session.closed:
         http_session = aiohttp.ClientSession(
@@ -790,56 +801,87 @@ async def main_loop():
     kucoin.ws_task = asyncio.create_task(kucoin.kucoin_websocket_listener())
     logging.info("KuCoin WebSocket listener task started", extra=add_log_context())
 
-    await get_initial_balances()
-    balance_updater_task = asyncio.create_task(update_global_balances())
-    balance_updater_task.add_done_callback(lambda t: None)
-    logging.info("Balance update task started", extra=add_log_context())
+    if legacy_enabled:
+        await get_initial_balances()
+        balance_updater_task = asyncio.create_task(update_global_balances())
+        balance_updater_task.add_done_callback(lambda t: None)
+        logging.info("Balance update task started", extra=add_log_context())
 
     # ریست کردن متغیرهای شبیه‌ساز در ابتدای کار
     consecutive_failures = 0
     simulation_mode = False
     simulation_start_time = 0
 
-    # 🔹 ریست کردن لیست valid_pairs برای جلوگیری از تداخل با اجراهای قبلی
+    # Reset the legacy pair list at startup.
     valid_pairs = []
+    if legacy_enabled:
+        for pair in PAIRS:
+            try:
+                if PAIRS[pair]["version"] == "V2":
+                    pool_contract = contracts["pools"][pair]
+                    reserves = pool_contract.functions.getReserves().call()
+                    if reserves[0] > 0 and reserves[1] > 0:
+                        if pair not in valid_pairs:
+                            valid_pairs.append(pair)
+                        logging.info(f"✅ Pool {pair} (V2) has liquidity: reserves {reserves[0]}, {reserves[1]}", extra=add_log_context())
+                    else:
+                        msg = f"⚠️ Pool {pair} (V2) has ZERO liquidity. Continuing with other pairs."
+                        logging.warning(msg, extra=add_log_context())
+                        await send_message(msg)
+                else:  # V3
+                    pool_contract = contracts["pools"][pair]
+                    liquidity = pool_contract.functions.liquidity().call()
+                    if liquidity > 0:
+                        if pair not in valid_pairs:
+                            valid_pairs.append(pair)
+                        logging.info(f"✅ Pool {pair} (V3) has liquidity: {liquidity}", extra=add_log_context())
+                    else:
+                        msg = f"⚠️ Pool {pair} (V3) has ZERO liquidity. Continuing with other pairs."
+                        logging.warning(msg, extra=add_log_context())
+                        await send_message(msg)
+            except Exception as e:
+                await log_error("main_loop", f"Failed to check liquidity for {pair}: {str(e)}", e)
+                continue
 
-    for pair in PAIRS:
-        try:
-            if PAIRS[pair]["version"] == "V2":
-                pool_contract = contracts["pools"][pair]
-                reserves = pool_contract.functions.getReserves().call()
-                if reserves[0] > 0 and reserves[1] > 0:
-                    if pair not in valid_pairs:
-                        valid_pairs.append(pair)
-                    logging.info(f"✅ Pool {pair} (V2) has liquidity: reserves {reserves[0]}, {reserves[1]}", extra=add_log_context())
-                else:
-                    msg = f"⚠️ Pool {pair} (V2) has ZERO liquidity. Continuing with other pairs."
-                    logging.warning(msg, extra=add_log_context())
-                    await send_message(msg)
-            else:  # V3
-                pool_contract = contracts["pools"][pair]
-                liquidity = pool_contract.functions.liquidity().call()
-                if liquidity > 0:
-                    if pair not in valid_pairs:
-                        valid_pairs.append(pair)
-                    logging.info(f"✅ Pool {pair} (V3) has liquidity: {liquidity}", extra=add_log_context())
-                else:
-                    msg = f"⚠️ Pool {pair} (V3) has ZERO liquidity. Continuing with other pairs."
-                    logging.warning(msg, extra=add_log_context())
-                    await send_message(msg)
-        except Exception as e:
-            await log_error("main_loop", f"Failed to check liquidity for {pair}: {str(e)}", e)
-            continue
 
-    if not valid_pairs:
-        await log_error("main_loop", "No valid pairs found with liquidity")
-        await send_message("Critical error: No valid pairs found with liquidity")
+        if not valid_pairs:
+            await log_error("main_loop", "No legacy pairs found with liquidity")
+            await send_message("No legacy Zilliqa pools have liquidity; continuing with generic markets if configured.")
+            legacy_enabled = False
+            if balance_updater_task and not balance_updater_task.done():
+                balance_updater_task.cancel()
+                try:
+                    await balance_updater_task
+                except asyncio.CancelledError:
+                    pass
+                balance_updater_task = None
+
+    if not legacy_enabled and not generic_markets:
+        if balance_updater_task and not balance_updater_task.done():
+            balance_updater_task.cancel()
+            try:
+                await balance_updater_task
+            except asyncio.CancelledError:
+                pass
+            balance_updater_task = None
+        if kucoin.ws_task and not kucoin.ws_task.done():
+            kucoin.ws_task.cancel()
+            try:
+                await kucoin.ws_task
+            except asyncio.CancelledError:
+                pass
+            kucoin.ws_task = None
+        logging.error("No executable markets available after initialization", extra=add_log_context())
         return
 
     # ============= حلقه اصلی با مدیریت try/finally =============
     try:
         while True:
-            await check_arbitrage()
+            if legacy_enabled:
+                await check_arbitrage()
+            else:
+                await market_runtime.run_cycle()
+                await asyncio.sleep(CHECK_INTERVAL)
     finally:
         # ⚠️ بخش حیاتی: پاکسازی کامل تسک‌ها هنگام خروج از حلقه
         logging.warning("Main loop is exiting. Cleaning up background tasks...", extra=add_log_context())
