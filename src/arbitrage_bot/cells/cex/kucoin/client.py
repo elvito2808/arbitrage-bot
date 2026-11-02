@@ -11,7 +11,7 @@ import traceback
 from datetime import datetime
 import aiohttp
 
-from constants import KUCOIN_BASE_URL, PRICE_CACHE_TIMEOUT, PRICE_ERROR_CACHE_TIMEOUT
+from constants import KUCOIN_BASE_URL, PRICE_CACHE_TIMEOUT, PRICE_ERROR_CACHE_TIMEOUT, PAIRS
 
 # ============= متغیرهای سراسری =============
 KUCOIN_API_KEY = None
@@ -21,6 +21,7 @@ http_session = None
 TIME_DELTA_FROM_KUCOIN = 0
 
 last_valid_price = {"kucoin": {"sell": None, "buy": None, "timestamp": None}}
+_last_valid_prices_by_symbol = {"ZIL-USDT": last_valid_price["kucoin"]}
 kucoin_ws_price = {"sell": None, "buy": None, "timestamp": 0}
 kucoin_ws_available = False
 ws_task = None
@@ -95,54 +96,25 @@ async def get_kucoin_server_time():
         await log_error("get_kucoin_server_time", str(e), e)
         return None
 
-async def kucoin_get_price():
+async def kucoin_get_price(symbol="ZIL-USDT"):
     global kucoin_ws_price, kucoin_ws_available, last_valid_price, http_session, _rest_counter_callback
-    if kucoin_ws_available and kucoin_ws_price["timestamp"] > 0 and time.time() - kucoin_ws_price["timestamp"] <= PRICE_CACHE_TIMEOUT:
-        logging.info("Using WebSocket KuCoin prices", extra=add_log_context())
-        return kucoin_ws_price["sell"], kucoin_ws_price["buy"]
-    logging.info("WebSocket not available or stale, falling back to REST", extra=add_log_context())
-    
-    if _rest_counter_callback:
-        _rest_counter_callback()
-
-    if http_session is None or http_session.closed:
-        http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12, connect=5))
-    
+    cache=_last_valid_prices_by_symbol.setdefault(symbol,{"sell":None,"buy":None,"timestamp":None})
+    if symbol=="ZIL-USDT" and kucoin_ws_available and kucoin_ws_price["timestamp"]>0 and time.time()-kucoin_ws_price["timestamp"]<=PRICE_CACHE_TIMEOUT:
+        return kucoin_ws_price["sell"],kucoin_ws_price["buy"]
+    if _rest_counter_callback: _rest_counter_callback()
+    if http_session is None or http_session.closed: http_session=aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12,connect=5))
     try:
-        async with http_session.get(
-            f"{KUCOIN_BASE_URL}/api/v1/market/orderbook/level1?symbol=ZIL-USDT",
-            timeout=20
-        ) as response:
-            if response.status == 200:
-                data = await response.json()
+        async with http_session.get(f"{KUCOIN_BASE_URL}/api/v1/market/orderbook/level1?symbol={symbol}",timeout=20) as response:
+            if response.status==200:
+                data=await response.json()
                 if data.get("data"):
-                    buy_price = float(data["data"]["bestAsk"])
-                    sell_price = float(data["data"]["bestBid"])
-                    last_valid_price["kucoin"] = {
-                        "sell": sell_price,
-                        "buy": buy_price,
-                        "timestamp": time.time()
-                    }
-                    logging.info(f"KuCoin REST prices: Sell={sell_price:.6f}, Buy={buy_price:.6f}", extra=add_log_context())
-                    return sell_price, buy_price
-                else:
-                    logging.warning(f"No data in KuCoin response: {data}", extra=add_log_context())
-            else:
-                logging.warning(f"KuCoin HTTP error: Status={response.status}, Response={await response.text()}", extra=add_log_context())
+                    buy_price=float(data["data"]["bestAsk"]); sell_price=float(data["data"]["bestBid"]); cache.update({"sell":sell_price,"buy":buy_price,"timestamp":time.time()})
+                    if symbol=="ZIL-USDT": last_valid_price["kucoin"]=cache
+                    return sell_price,buy_price
     except Exception as e:
-        await log_error("kucoin_get_price", f"Failed to fetch KuCoin prices: {str(e)}", e)
-        await close_http_session()  # ← بستن اجباری Session در صورت خطا
-    
-    # استفاده از کش با محدودیت سنی مخصوص خطا (۶ ثانیه)
-    if (last_valid_price["kucoin"]["sell"] is not None and
-        last_valid_price["kucoin"]["buy"] is not None and
-        last_valid_price["kucoin"]["timestamp"] is not None and
-        time.time() - last_valid_price["kucoin"]["timestamp"] <= PRICE_ERROR_CACHE_TIMEOUT):
-        logging.info("Using cached REST KuCoin prices (error cache)", extra=add_log_context())
-        return last_valid_price["kucoin"]["sell"], last_valid_price["kucoin"]["buy"]
-    
-    logging.warning("No valid KuCoin price available", extra=add_log_context())
-    return None, None
+        await log_error("kucoin_get_price",f"Failed to fetch KuCoin prices for {symbol}: {str(e)}",e); await close_http_session()
+    if cache["sell"] is not None and cache["buy"] is not None and cache["timestamp"] is not None and time.time()-cache["timestamp"]<=PRICE_ERROR_CACHE_TIMEOUT: return cache["sell"],cache["buy"]
+    return None,None
 
 async def handle_ticker(msg):
     global kucoin_ws_price
@@ -218,10 +190,13 @@ async def kucoin_swap(direction, pair, zil_amount_int, price, **kwargs):
     if http_session is None or http_session.closed:
         http_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12, connect=5))
     
-    symbol = "ZIL-USDT"
-    side = "buy" if direction == "USDT_TO_ZIL" else "sell"
-    zil_amount = zil_amount_int / 10**18
-    size = round(zil_amount, 4)
+    market_config = PAIRS.get(pair, {})
+    symbol = kwargs.get("symbol") or market_config.get("cex_symbol", "ZIL-USDT")
+    side = "buy" if direction in ("USDT_TO_ZIL", "QUOTE_TO_BASE") else "sell"
+    base_decimals = int(market_config.get("cex_base_decimals", 18))
+    size_precision = int(market_config.get("cex_size_precision", 4))
+    zil_amount = zil_amount_int / (10 ** base_decimals)
+    size = round(zil_amount, size_precision)
     order = {
         "clientOid": str(uuid.uuid4()),
         "side": side,

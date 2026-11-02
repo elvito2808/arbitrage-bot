@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "assets": {
+    "WZIL": {
+      "symbol": "WZIL",
+      "chain_key": "zilliqa-evm",
+      "address": "0x94e18aE7dd5eE57B55f30c4B63E2760c09EFb192",
+      "decimals": 18,
+      "cex_currency": "ZIL"
+    },
+    "ZUSDC": {
+      "symbol": "ZUSDC",
+      "chain_key": "zilliqa-evm",
+      "address": "0xe59f97Fac09ee00AEEF320485ee45D5CcfbBC1E9",
+      "decimals": 6,
+      "cex_currency": "USDC"
+    },
+    "ZUSDT": {
+      "symbol": "zUSDT",
+      "chain_key": "zilliqa-evm",
+      "address": "0x2274005778063684fbB1BfA96a2b725dc37d75f9",
+      "decimals": 6,
+      "cex_currency": "USDT"
+    }
+  },
+  "markets": [
+    {
+      "market_id": "WZIL_ZUSDC",
+      "enabled": true,
+      "execution_profile": "legacy_zilliqa_wzil",
+      "chain_key": "zilliqa-evm",
+      "dex_key": "plunderswap",
+      "dex_pair_key": "WZIL_ZUSDC",
+      "cex_key": "kucoin",
+      "cex_symbol": "ZIL-USDT",
+      "cex_base_currency": "ZIL",
+      "cex_quote_currency": "USDT",
+      "base_asset_id": "WZIL",
+      "quote_asset_id": "ZUSDC",
+      "pool": "0xb1bA173026DBC2A56AF63669A402D4C3D7AEEF3E",
+      "version": "V2",
+      "fee_bps": 35,
+      "fee_percent": 0.0035,
+      "default_gas": 300000,
+      "base_amounts_raw": [
+        "5000000000000000000000",
+        "10000000000000000000000",
+        "15000000000000000000000",
+        "25000000000000000000000"
+      ],
+      "profit_thresholds_quote": [
+        0.08,
+        0.16,
+        0.4,
+        1
+      ],
+      "cex_base_decimals": 18,
+      "cex_size_precision": 4,
+      "legacy_quote_scale": 1000000
+    },
+    {
+      "market_id": "WZIL_zUSDT",
+      "enabled": true,
+      "execution_profile": "legacy_zilliqa_wzil",
+      "chain_key": "zilliqa-evm",
+      "dex_key": "plunderswap",
+      "dex_pair_key": "WZIL_zUSDT",
+      "cex_key": "kucoin",
+      "cex_symbol": "ZIL-USDT",
+      "cex_base_currency": "ZIL",
+      "cex_quote_currency": "USDT",
+      "base_asset_id": "WZIL",
+      "quote_asset_id": "ZUSDT",
+      "pool": "0xD9969Fac78afC7C696443802C0b8cFf1b1B45Fc8",
+      "version": "V3",
+      "fee_bps": 100,
+      "fee_percent": 0.0001,
+      "default_gas": 300000,
+      "base_amounts_raw": [
+        "5000000000000000000000",
+        "10000000000000000000000",
+        "15000000000000000000000",
+        "25000000000000000000000"
+      ],
+      "profit_thresholds_quote": [
+        0.08,
+        0.18,
+        0.4,
+        1
+      ],
+      "cex_base_decimals": 18,
+      "cex_size_precision": 4,
+      "legacy_quote_scale": 1
+    }
+  ]
+}

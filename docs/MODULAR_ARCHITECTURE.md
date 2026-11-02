@@ -1,0 +1,5 @@
+# Modular architecture
+
+Markets, chains and DEX deployments are defined in separate JSON files. MarketRegistry validates chain/DEX/asset references and per-market amount/threshold settings. KuCoin remains the single CEX module; the client accepts market symbols and isolates REST caches by symbol. DEX adapters are registered by (chain_key, dex_key) so deployments do not share adapter instances. Chain adapters own network-specific RPC and balance access. ArbitrageEngine evaluates normalized quotes without importing exchange or network code.
+
+The legacy execution profile still means WZIL/stable-token pools on Zilliqa EVM and uses KuCoin's ZIL balance model. Do not assign it to another base asset or chain. The adapter contracts and generic engine are extension points; live execution on a non-Zilliqa network is not enabled until the runtime coordinator, balance model and transaction path are routed through the new adapters and integration-tested. The existing main branch and previous behavior-preserving branch remain unchanged.

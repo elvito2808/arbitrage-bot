@@ -357,11 +357,16 @@ async def check_arbitrage():
     cycle_request_count = {}
     logging.info("Starting arbitrage check cycle", extra=add_log_context())
 
-    fetch_start = time.perf_counter()
-    kucoin_sell, kucoin_buy = await kucoin.kucoin_get_price()
-
     # جلوگیری از پردازش تکراری در صورت تکراری بودن valid_pairs
-    unique_pairs = list(dict.fromkeys(valid_pairs))  # حذف تکراری‌ها
+    unique_pairs = list(dict.fromkeys(valid_pairs))
+    fetch_start = time.perf_counter()
+    kucoin_prices = {}
+    symbol_prices = {}
+    for pair in unique_pairs:
+        symbol = PAIRS[pair].get("cex_symbol", "ZIL-USDT")
+        if symbol not in symbol_prices:
+            symbol_prices[symbol] = await kucoin.kucoin_get_price(symbol)
+        kucoin_prices[pair] = symbol_prices[symbol]
 
     tasks = []
     for pair in unique_pairs:
@@ -394,7 +399,7 @@ async def check_arbitrage():
     fetch_duration = time.perf_counter() - fetch_start
     logging.info(f"Fetching all prices completed in {fetch_duration:.3f} seconds", extra=add_log_context())
 
-    if kucoin_sell is None or kucoin_buy is None:
+    if not any(sell is not None and buy is not None for sell, buy in kucoin_prices.values()):
         logging.warning("KuCoin price missing, skipping cycle", extra=add_log_context())
         await asyncio.sleep(CHECK_INTERVAL)
         return
@@ -406,6 +411,9 @@ async def check_arbitrage():
     kucoin_fee = 0.001
     for pair in unique_pairs:
         if pair not in pl_prices:
+            continue
+        kucoin_sell, kucoin_buy = kucoin_prices[pair]
+        if kucoin_sell is None or kucoin_buy is None:
             continue
         results = pl_prices[pair]
         zil_amounts = [amt / 10**18 for amt in ZIL_AMOUNT[pair]]
@@ -451,6 +459,9 @@ async def check_arbitrage():
     best_opp_per_pair = {}
     for pair in unique_pairs:
         if pair not in pl_prices:
+            continue
+        kucoin_sell, kucoin_buy = kucoin_prices[pair]
+        if kucoin_sell is None or kucoin_buy is None:
             continue
         results = pl_prices[pair]
         best_opp = None
@@ -532,6 +543,7 @@ async def check_arbitrage():
 
     # ============= حلقه‌ی اجرای تراکنش‌ها =============
     for pair, opp in best_opp_per_pair.items():
+        kucoin_sell, kucoin_buy = kucoin_prices[pair]
         logging.info(f"Executing arbitrage for {pair}, amount={opp['zil_amount_int']/10**18:.0f} ZIL, profit={opp['profit']:.2f} USDT", extra=add_log_context())
 
         success_wallet, _, _, _ = await dex.check_wallet_balance(
@@ -618,7 +630,8 @@ async def check_arbitrage():
                 direction="USDT_TO_ZIL",
                 pair=pair,
                 zil_amount_int=opp["zil_amount_int"],
-                price=opp["buy_price"]
+                price=opp["buy_price"],
+                symbol=PAIRS[pair].get("cex_symbol", "ZIL-USDT")
             )
         else:
             success_ku, order_id = await retry_swap(
@@ -627,7 +640,8 @@ async def check_arbitrage():
                 direction="ZIL_TO_USDT",
                 pair=pair,
                 zil_amount_int=opp["zil_amount_int"],
-                price=opp["sell_price"]
+                price=opp["sell_price"],
+                symbol=PAIRS[pair].get("cex_symbol", "ZIL-USDT")
             )
         if not success_ku:
             logging.warning(f"KuCoin swap failed for {pair}, arbitrage incomplete", extra=add_log_context())

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "dexes": [
+    {
+      "dex_key": "plunderswap",
+      "chain_key": "zilliqa-evm",
+      "adapter": "arbitrage_bot.cells.dexes.plunderswap.adapter.PlunderSwapAdapter",
+      "enabled": true
+    }
+  ]
+}
