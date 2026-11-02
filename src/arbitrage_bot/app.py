@@ -42,6 +42,8 @@ async def _run(settings: Settings, cycles: int, interval: float) -> int:
     log.warning("runtime_start mode=shadow live_trading_enabled=false cycles=%s interval_seconds=%s", cycles, interval)
     log.warning("safety_boundary read_only_rpc=true public_kucoin_data=true order_submission=disabled")
     completed = 0
+    successful = 0
+    failed = 0
     while cycles == 0 or completed < cycles:
         completed += 1
         try:
@@ -64,15 +66,19 @@ async def _run(settings: Settings, cycles: int, interval: float) -> int:
                 (f"{allowed[0][0].pair}:{allowed[0][0].direction}:profit={allowed[0][0].estimated_profit_quote}"
                  if allowed else "none"),
             )
+            successful += 1
         except asyncio.CancelledError:
             raise
         except Exception:
+            failed += 1
             log.exception("shadow_cycle_failed cycle=%d", completed)
         if cycles != 0 and completed >= cycles:
             break
         await asyncio.sleep(interval)
-    log.warning("runtime_stopped mode=shadow cycles_completed=%d live_trading_enabled=false", completed)
-    return 0
+    log.warning("runtime_stopped mode=shadow cycles_completed=%d successful=%d failed=%d live_trading_enabled=false",
+                completed, successful, failed)
+    # A one-cycle smoke test must fail visibly when no data cycle succeeded.
+    return 1 if successful == 0 else 0
 
 
 def main() -> int:
