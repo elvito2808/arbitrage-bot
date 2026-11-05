@@ -1,0 +1,45 @@
+# Repository Analysis Report
+
+## Scope and completeness
+
+Inspected checkout `arbitrage-bot` (the repository root) read-only. Its visible project files are `main_bot.py`, `constants.py`, `rpc_manager.py`, `kucoin_client.py`, `dex_plunderswap.py`, `logging_utils.py`, four ABI JSON files, `requirements.txt`, `.gitignore`, and `docs/SERVER_TEST_INSTRUCTIONS.md`, plus `.git` and generated `__pycache__`. Initial Git status showed pre-existing staged deletions for `approve_tokens.py` and `github_access_test.py`; their HEAD contents were inspected read-only, without restoring them. No `.env`, active Python test file, `pyproject.toml`, setup file, Dockerfile, CI YAML, or `AGENTS.md` appeared in the working-tree inventory. The server document refers to the absent diagnostic script. Runtime behavior was not exercised.
+
+## Project character
+
+An asyncio Python bot arbitrages ZIL-USDT between KuCoin spot market (one CEX) and Plunderswap on Zilliqa EVM (DEX pools represented as V2 and V3). `main_bot.py` owns orchestration, logging setup, balances, profitability decisions, retries, and process restart. `dex_plunderswap.py` owns pool reads, V2/V3 quote arithmetic, wallet checks, transaction construction, signing/submission/receipt, and a read-only `eth_call` simulation path. `kucoin_client.py` owns public ticker REST/WebSocket, signed private balance/order API, and HTTP session helpers. `rpc_manager.py` owns Web3 connection selection, contract creation, and node failure switching. `constants.py` combines ABI loading, network and contract data, pair definitions, thresholds, timing, and log paths. `logging_utils.py` is a separate counter/logger helper but main/Dex/KuCoin each also implement their own error helpers; it is not imported by those modules in this checkout.
+
+## Exact startup and lifecycle
+
+1. Importing `main_bot.py` imports Web3/aiohttp/dotenv, DEX and KuCoin modules, constants, and RPC manager. It creates the `logs` directory and configures timed main log, rotating error/trade logs, and console logging at module import. Importing constants loads three ABI JSON files immediately and defines two inline ABIs.
+2. `asyncio.run(run_bot())` enters an infinite outer loop. `run_bot` awaits `main_loop`; on a normal return it waits 5 seconds and starts again. Unhandled exceptions are logged, `gc.collect()` is called, then it waits 1 or 10 seconds depending on `ConnectionError` count; `KeyboardInterrupt` cancels tasks, closes HTTP session, and exits.
+3. `main_loop` checks ABI references, then repeatedly calls `load_environment_variables` until `METAMASK_PRIVATE_KEY`, KuCoin API key, secret, and passphrase are present. Telegram token/chat ID are optional. There is no environment sample file in the inspected tree.
+4. It constructs a temporary Web3 provider from the first `RPC_NODES` entry to derive wallet address from private key (before `RPCManager` connection check). `RPCManager` is constructed, linked to Telegram sender and per-cycle counter callback, and `ensure_connection` cycles configured nodes forever until connected. Provider timeout is 30 s; after each failed attempt the node index rotates, every 20 attempts a Telegram alert is sent, and retry sleep is 3 s.
+5. `RPCManager._reinitialize_contracts` checksum-normalizes router, WZIL, ZUSDC, ZUSDT and builds token/router/pool contracts. Pool ABI is selected from pair `version`: V2 uses `plunder_pair_abi.json`; otherwise V3 uses inline `PAIR_ABI` (`slot0`, `liquidity`). These handles/private key/wallet are injected into the DEX module globals.
+6. Main creates/reuses an aiohttp session (total 12 s, connect 5 s, connector limit 30), shares it with KuCoin, synchronizes KuCoin timestamp (REST request timeout implicit in shared session), assigns credentials and counters, resets/cancels prior WebSocket and balance tasks, and starts the KuCoin ticker listener.
+7. It fetches initial balances in an unbounded loop (5 s delay; Telegram every 20 failures), snapshots them, then starts a balance refresher every 300 s (retry wrapper up to 20 attempts). Initial pool validation iterates pair mapping order: V2 calls `getReserves`; V3 calls `liquidity`; positive liquidity appends pair to `valid_pairs`; errors are logged and skipped. If no pair is valid, the function returns and outer loop restarts after 5 s.
+8. Main loop repeatedly calls `check_arbitrage`. Each cycle requests KuCoin ticker (fresh WebSocket if timestamp age <= 8 s; otherwise REST with request timeout 20 s and possible 6 s error-cache fallback). It concurrently obtains Plunderswap quote arrays for unique valid pairs using `asyncio.gather(return_exceptions=True)`, with DEX-specific caches/error behavior.
+9. If either KuCoin side is missing or all DEX quotes are missing, it sleeps 6 s and returns. For every amount, it computes both directions using KuCoin fee `0.001`, DEX quote amounts, pair thresholds, and chooses the highest input amount first (reverse amount index) whose profit exceeds its amount-index threshold and whose direction wins the comparison. It then calls `check_wallet_balance`; smaller amount is tried on insufficient balance.
+10. For each selected pair (in valid-pair insertion order), it checks balances again and snapshots aggregate balances. If simulator mode is active it first invokes `simulate_swap_on_nodes` (builds a transaction and `eth_call`s each node with 10 s provider timeout); on successful simulation it chooses that node and exits simulator mode. It then retries DEX execution up to 2 times, passing gas multipliers 2.0 then 2.5, with retry delay base 1 s.
+11. The DEX swap path builds/signs transaction, fetches nonce (`pending`), sends raw transaction, and waits synchronously for receipt with timeout 30 s. On success it updates in-memory DEX balances and sleeps 0.3 s. Consecutive DEX failures increment; at 10 it enters simulator mode for 600 s. A successful DEX leg is followed by a KuCoin market order in the appropriate direction, retried up to 2 times, base delay 1 s. There is no rollback/compensation if KuCoin fails after DEX succeeds.
+12. After both legs report success it retries balance refresh up to 10 attempts, records aggregate deltas and trade log, sends Telegram summary, then sleeps 0.3 s per completed arbitrage. Cycle concludes with 6 s wait. Main-loop finally block cancels the balance updater and WebSocket task.
+
+## Function ownership inventory
+
+- `constants.py`: `load_abi`; all ABI, network, pool, pair, amount, fee, threshold, cache, retry-related simulation and logging constants.
+- `rpc_manager.py`: `RPCManager.__init__`, `set_telegram_sender`, `set_counter_callback`, `_send_telegram`, `_reinitialize_contracts`, `ensure_connection`, `get_w3`, `get_tx_contracts`, `report_operation_result`.
+- `kucoin_client.py`: `close_http_session`, callback setters, `add_log_context`, `log_error`, `kucoin_sign`, `get_kucoin_server_time`, `kucoin_get_price`, `handle_ticker`, `kucoin_websocket_listener`, `kucoin_swap`.
+- `dex_plunderswap.py`: `add_log_context`, `log_error`, `get_revert_reason`, V2 exact-input/output integer arithmetic, V3 exact-input/output arithmetic, V2/V3/get dispatcher price fetches, `check_wallet_balance`, V2/V3 transaction builders, V2/V3/dispatcher swaps, and `simulate_swap_on_nodes`.
+- `main_bot.py`: logging configuration, `add_log_context`, `log_trade`, global orchestration state, `count_rpc_call`, `log_error`, `send_message`, `retry`, `retry_swap`, `display_balances`, `update_global_balances`, `get_initial_balances`, `load_environment_variables`, `check_arbitrage`, `main_loop`, `run_bot`.
+- `logging_utils.py`: `add_log_context`, `log_error`, `reset_error_counters`, `get_error_stats`; currently not wired into other modules.
+- HEAD-only `approve_tokens.py` (pre-existing staged deletion): standalone token-approval utility; `load_environment`, `connect_to_zilliqa`, `approve_token`, `main`. It contains an actual `approve` transaction submission path and is not part of normal main entrypoint. Do not run it or restore it as part of modularization without explicit scope.
+- HEAD-only `github_access_test.py` (pre-existing staged deletion): dependency-free Python/temp-file diagnostic, not a trading test. `docs/SERVER_TEST_INSTRUCTIONS.md` describes it. Do not restore it into original checkout.
+
+## Target architecture
+
+See `MIGRATION_PLAN.md`. Keep domain types and orchestration independent of providers; register network profiles, CEX adapters, and DEX adapters by stable identifiers. Existing Zilliqa/KuCoin/Plunderswap behavior remains implemented as provider modules, with explicit pair/network configuration. Adding a provider should add a module and registration/config entry, not modify another provider's code. Do not generalize calculations in a way that changes rounding, token decimals, tuple meanings, call order, or failure semantics.
+
+## Inventory detail pointers
+
+- Exact values and source locations: `BEHAVIOR_INVENTORY.md`.
+- Imports/dependency relationships and startup call graph: `DEPENDENCY_MAP.md`.
+- Migration stages/acceptance constraints: `MIGRATION_PLAN.md`.

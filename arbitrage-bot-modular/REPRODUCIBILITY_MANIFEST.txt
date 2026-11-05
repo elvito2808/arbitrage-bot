@@ -1,0 +1,7 @@
+Parent Git base commit: eca51b73f95ab71781a691ea2d4ed03e2c36a9de
+Working branch: codex/live-readiness-three-cycle-20261105
+Final project commit: recorded in final delivery; archive is a source/test transfer package.
+Archive: arbitrage-bot-modular-validation.zip
+Archive SHA-256: 4bf032da74c4113b7283e71c85d2191ad938fb457ee2030c5053d0daa30a9263
+requirements.txt SHA-256: d80f0f4847c815ece43c8f441723eeb108c2e0e640131836f052665cdb1f26c9
+Historical tests: Manager-reported Linux 34 / Windows 32 before final uncapping; not rerun.
